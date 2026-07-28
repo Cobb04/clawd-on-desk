@@ -44,6 +44,7 @@
   // startsWith("Mac") not /\bMac\b/ — "MacIntel" has \w after "c", fails \b (regression #135).
   const IS_MAC = (navigator.platform || "").startsWith("Mac");
   const COLLAPSED_GROUPS_STORAGE_KEY = "clawd.settings.collapsedGroups.v1";
+  const NON_RENDERING_SETTINGS_KEYS = new Set(["settingsWindowBounds"]);
 
   const state = {
     snapshot: null,
@@ -1256,6 +1257,10 @@
     if (!state.snapshot) return;
 
     const changes = payload && payload.changes;
+    const changeKeys = changes ? Object.keys(changes) : [];
+    if (changeKeys.length > 0 && changeKeys.every((key) => NON_RENDERING_SETTINGS_KEYS.has(key))) {
+      return;
+    }
     clearTransientStateForChanges(changes);
     const needsAnimOverridesRefresh = !!(changes && (
       "theme" in changes || "themeVariant" in changes || "themeOverrides" in changes

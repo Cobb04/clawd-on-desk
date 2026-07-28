@@ -7368,6 +7368,47 @@ describe("settings renderer browser environment", () => {
     assert.strictEqual(contentRenderCount, 0);
   });
 
+  it("updates Settings window bounds without rerendering the active tab", () => {
+    const core = loadSettingsCoreForTest();
+    core.state.activeTab = "about";
+    core.state.snapshot = {
+      lang: "en",
+      settingsWindowBounds: null,
+    };
+    const renderCounts = {
+      sidebar: 0,
+      content: 0,
+      modal: 0,
+    };
+    core.ops.installRenderHooks({
+      sidebar: () => {
+        renderCounts.sidebar++;
+      },
+      content: () => {
+        renderCounts.content++;
+      },
+      modal: () => {
+        renderCounts.modal++;
+      },
+    });
+
+    const settingsWindowBounds = { x: 73, y: 91, width: 1040, height: 720 };
+    core.ops.applyChanges({
+      changes: { settingsWindowBounds },
+      snapshot: {
+        ...core.state.snapshot,
+        settingsWindowBounds,
+      },
+    });
+
+    assert.deepStrictEqual(core.state.snapshot.settingsWindowBounds, settingsWindowBounds);
+    assert.deepStrictEqual(renderCounts, {
+      sidebar: 0,
+      content: 0,
+      modal: 0,
+    });
+  });
+
   it("renders the idle visual picker and submits setIdleVisual for the chosen option", async () => {
     const commandCalls = [];
     const runtime = createIdleVisualRuntime();

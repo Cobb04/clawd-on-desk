@@ -30,8 +30,8 @@ function isUsableBounds(bounds) {
     && Number.isFinite(bounds.y)
     && Number.isFinite(bounds.width)
     && Number.isFinite(bounds.height)
-    && bounds.width >= 1
-    && bounds.height >= 1;
+    && bounds.width > 0
+    && bounds.height > 0;
 }
 
 function normalizeWorkArea(workArea) {
@@ -53,8 +53,8 @@ function clampBoundsToWorkArea(bounds, workArea) {
   };
 }
 
-function normalizeBounds(bounds) {
-  if (!isUsableBounds(bounds)) return null;
+function normalizePersistableBounds(bounds) {
+  if (!isUsableBounds(bounds) || bounds.width < 1 || bounds.height < 1) return null;
   return {
     x: Math.round(bounds.x),
     y: Math.round(bounds.y),
@@ -153,7 +153,7 @@ function createSettingsWindowRuntime(options = {}) {
   function readSavedBounds() {
     if (typeof options.getSavedBounds !== "function") return null;
     try {
-      return normalizeBounds(options.getSavedBounds());
+      return normalizePersistableBounds(options.getSavedBounds());
     } catch {
       return null;
     }
@@ -217,7 +217,7 @@ function createSettingsWindowRuntime(options = {}) {
     if (!readBounds) return null;
 
     try {
-      return normalizeBounds(readBounds());
+      return normalizePersistableBounds(readBounds());
     } catch {
       return null;
     }

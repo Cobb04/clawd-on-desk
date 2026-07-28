@@ -447,6 +447,24 @@ test("settings window ignores malformed saved bounds and keeps the pet-display f
   );
 });
 
+test("settings window keeps positive fractional pet bounds usable for display fallback", () => {
+  let nearestArgs = null;
+  const { runtime } = createRuntime({
+    runtime: {
+      getSavedBounds: () => null,
+      getPetWindowBounds: () => ({ x: 100, y: 200, width: 0.5, height: 0.5 }),
+      getNearestWorkArea: (cx, cy) => {
+        nearestArgs = { cx, cy };
+        return { x: 0, y: 0, width: 1280, height: 800 };
+      },
+    },
+  });
+
+  runtime.open();
+
+  assert.deepStrictEqual(nearestArgs, { cx: 100.25, cy: 200.25 });
+});
+
 test("settings window debounces move and resize bounds saves", () => {
   const saved = [];
   const { runtime, timers } = createRuntime({
