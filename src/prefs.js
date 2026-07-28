@@ -75,6 +75,11 @@ const SCHEMA = {
   // Window state
   x: { type: "number", default: 0, validate: (v) => Number.isFinite(v) },
   y: { type: "number", default: 0, validate: (v) => Number.isFinite(v) },
+  settingsWindowBounds: {
+    type: "object",
+    defaultFactory: () => null,
+    normalize: normalizeSettingsWindowBounds,
+  },
   positionSaved: { type: "boolean", default: false },
   positionThemeId: { type: "string", default: "" },
   positionVariantId: { type: "string", default: "" },
@@ -796,6 +801,15 @@ function normalizeSavedPixelWorkArea(value) {
   if (!Number.isFinite(w) || w <= 0) return null;
   if (!Number.isFinite(h) || h <= 0) return null;
   return { width: w, height: h };
+}
+
+function normalizeSettingsWindowBounds(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const { x, y, width, height } = value;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  if (!Number.isFinite(width) || width < 1) return null;
+  if (!Number.isFinite(height) || height < 1) return null;
+  return { x, y, width, height };
 }
 
 function normalizePositionDisplay(value) {

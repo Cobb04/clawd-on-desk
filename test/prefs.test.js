@@ -713,6 +713,49 @@ describe("prefs.validate", () => {
     }
   });
 
+  it("settingsWindowBounds defaults to null and normalizes valid bounds", () => {
+    assert.strictEqual(prefs.getDefaults().settingsWindowBounds, null);
+
+    const v = prefs.validate({
+      ...prefs.getDefaults(),
+      settingsWindowBounds: {
+        x: -1200,
+        y: 40,
+        width: 1040,
+        height: 720,
+        stray: "ignored",
+      },
+    });
+    assert.deepStrictEqual(v.settingsWindowBounds, {
+      x: -1200,
+      y: 40,
+      width: 1040,
+      height: 720,
+    });
+  });
+
+  it("settingsWindowBounds drops malformed values back to null", () => {
+    for (const settingsWindowBounds of [
+      "not an object",
+      {},
+      { x: NaN, y: 0, width: 800, height: 560 },
+      { x: 0, y: Infinity, width: 800, height: 560 },
+      { x: 0, y: 0, width: 0.4, height: 560 },
+      { x: 0, y: 0, width: 0, height: 560 },
+      { x: 0, y: 0, width: 800, height: -1 },
+    ]) {
+      const v = prefs.validate({
+        ...prefs.getDefaults(),
+        settingsWindowBounds,
+      });
+      assert.strictEqual(
+        v.settingsWindowBounds,
+        null,
+        `expected null for ${JSON.stringify(settingsWindowBounds)}`,
+      );
+    }
+  });
+
   // Phase 3b-swap: themeVariant field
   it("themeVariant defaults to empty object (no migration needed)", () => {
     const d = prefs.getDefaults();
@@ -1415,11 +1458,16 @@ describe("prefs.save", () => {
     snap.lang = "zh";
     snap.bubbleFollowPet = true;
     snap.x = 42;
+    snap.settingsWindowBounds = { x: 73, y: 91, width: 1040, height: 720 };
     prefs.save(p, snap);
     const { snapshot } = prefs.load(p);
     assert.strictEqual(snapshot.lang, "zh");
     assert.strictEqual(snapshot.bubbleFollowPet, true);
     assert.strictEqual(snapshot.x, 42);
+    assert.deepStrictEqual(
+      snapshot.settingsWindowBounds,
+      { x: 73, y: 91, width: 1040, height: 720 },
+    );
     assert.strictEqual(snapshot.version, prefs.CURRENT_VERSION);
   });
 

@@ -16,6 +16,7 @@ const MIN_WIDTH = 640;
 const MIN_HEIGHT = 480;
 const READY_TO_SHOW_FALLBACK_MS = 2000;
 const SETTINGS_FRONT_LIFT_MS = 200;
+const SETTINGS_BOUNDS_SAVE_DEBOUNCE_MS = 500;
 const FALLBACK_WORK_AREA = { x: 0, y: 0, width: 1280, height: 800 };
 
 function requiredDependency(value, name) {
@@ -29,8 +30,8 @@ function isUsableBounds(bounds) {
     && Number.isFinite(bounds.y)
     && Number.isFinite(bounds.width)
     && Number.isFinite(bounds.height)
-    && bounds.width > 0
-    && bounds.height > 0;
+    && bounds.width >= 1
+    && bounds.height >= 1;
 }
 
 function normalizeWorkArea(workArea) {
@@ -50,6 +51,25 @@ function clampBoundsToWorkArea(bounds, workArea) {
     width: Math.round(width),
     height: Math.round(height),
   };
+}
+
+function normalizeBounds(bounds) {
+  if (!isUsableBounds(bounds)) return null;
+  return {
+    x: Math.round(bounds.x),
+    y: Math.round(bounds.y),
+    width: Math.round(bounds.width),
+    height: Math.round(bounds.height),
+  };
+}
+
+function boundsEqual(a, b) {
+  return !!a
+    && !!b
+    && a.x === b.x
+    && a.y === b.y
+    && a.width === b.width
+    && a.height === b.height;
 }
 
 function createSettingsWindowRuntime(options = {}) {
@@ -72,6 +92,8 @@ function createSettingsWindowRuntime(options = {}) {
   let settingsWindow = null;
   let readyToShowFallbackTimer = null;
   let liftTimer = null;
+  let boundsSaveTimer = null;
+  let lastSavedBounds = null;
   let showPendingSettingsWindow = null;
 
   function getWindow() {
@@ -100,6 +122,12 @@ function createSettingsWindowRuntime(options = {}) {
     liftTimer = null;
   }
 
+  function clearBoundsSaveTimer() {
+    if (!boundsSaveTimer) return;
+    clearScheduled(boundsSaveTimer);
+    boundsSaveTimer = null;
+  }
+
   function getIconPath() {
     return getSettingsWindowIconPath({
       platform,
@@ -122,10 +150,33 @@ function createSettingsWindowRuntime(options = {}) {
     });
   }
 
+  function readSavedBounds() {
+    if (typeof options.getSavedBounds !== "function") return null;
+    try {
+      return normalizeBounds(options.getSavedBounds());
+    } catch {
+      return null;
+    }
+  }
+
+  function findWorkArea(cx, cy) {
+    if (typeof options.getNearestWorkArea !== "function") return FALLBACK_WORK_AREA;
+    try {
+      return normalizeWorkArea(options.getNearestWorkArea(cx, cy));
+    } catch {
+      return FALLBACK_WORK_AREA;
+    }
+  }
+
   function computeInitialBounds() {
+    const savedBounds = readSavedBounds();
+    lastSavedBounds = savedBounds ? { ...savedBounds } : null;
     let cx = 0;
     let cy = 0;
-    if (typeof options.getPetWindowBounds === "function") {
+    if (savedBounds) {
+      cx = savedBounds.x + savedBounds.width / 2;
+      cy = savedBounds.y + savedBounds.height / 2;
+    } else if (typeof options.getPetWindowBounds === "function") {
       try {
         const petBounds = options.getPetWindowBounds();
         if (isUsableBounds(petBounds)) {
@@ -135,14 +186,8 @@ function createSettingsWindowRuntime(options = {}) {
       } catch {}
     }
 
-    let workArea = FALLBACK_WORK_AREA;
-    if (typeof options.getNearestWorkArea === "function") {
-      try {
-        workArea = normalizeWorkArea(options.getNearestWorkArea(cx, cy));
-      } catch {
-        workArea = FALLBACK_WORK_AREA;
-      }
-    }
+    const workArea = findWorkArea(cx, cy);
+    if (savedBounds) return clampBoundsToWorkArea(savedBounds, workArea);
 
     const scale = getTextScale();
     const width = Math.min(scaleWidth(DEFAULT_WIDTH, scale), Math.max(1, workArea.width));
@@ -153,6 +198,57 @@ function createSettingsWindowRuntime(options = {}) {
       width,
       height,
     }, workArea);
+  }
+
+  function getPersistableBounds(win) {
+    if (!isLiveWindow(win)) return null;
+    const useNormalBounds = (
+      (typeof win.isMinimized === "function" && win.isMinimized())
+      || (typeof win.isMaximized === "function" && win.isMaximized())
+      || (typeof win.isFullScreen === "function" && win.isFullScreen())
+    );
+    let readBounds = null;
+    if (useNormalBounds) {
+      if (typeof win.getNormalBounds !== "function") return null;
+      readBounds = win.getNormalBounds.bind(win);
+    } else if (typeof win.getBounds === "function") {
+      readBounds = win.getBounds.bind(win);
+    }
+    if (!readBounds) return null;
+
+    try {
+      return normalizeBounds(readBounds());
+    } catch {
+      return null;
+    }
+  }
+
+  function saveBounds(win) {
+    if (typeof options.onSaveBounds !== "function") return false;
+    const bounds = getPersistableBounds(win);
+    if (!bounds || boundsEqual(bounds, lastSavedBounds)) return false;
+    try {
+      const result = options.onSaveBounds(bounds);
+      if (result && result.status === "error") return false;
+      lastSavedBounds = bounds;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function scheduleBoundsSave(win) {
+    if (typeof options.onSaveBounds !== "function") return;
+    clearBoundsSaveTimer();
+    boundsSaveTimer = scheduleTimer(() => {
+      boundsSaveTimer = null;
+      saveBounds(win);
+    }, SETTINGS_BOUNDS_SAVE_DEBOUNCE_MS);
+  }
+
+  function flushBoundsSave(win) {
+    clearBoundsSaveTimer();
+    return saveBounds(win);
   }
 
   function getTextScale() {
@@ -312,12 +408,15 @@ function createSettingsWindowRuntime(options = {}) {
     if (typeof createdWindow.on === "function") {
       let moveTextScaleTimer = null;
       createdWindow.on("move", () => {
+        scheduleBoundsSave(createdWindow);
         if (moveTextScaleTimer) clearScheduled(moveTextScaleTimer);
         moveTextScaleTimer = scheduleTimer(() => {
           moveTextScaleTimer = null;
           applyTextScaleToWindow();
         }, 350);
       });
+      createdWindow.on("resize", () => scheduleBoundsSave(createdWindow));
+      createdWindow.on("close", () => flushBoundsSave(createdWindow));
     }
     let didShowCreatedWindow = false;
     function showCreatedWindow(showOptions = {}) {
@@ -338,6 +437,7 @@ function createSettingsWindowRuntime(options = {}) {
         showPendingSettingsWindow = null;
         clearReadyToShowFallbackTimer();
         clearLiftTimer();
+        clearBoundsSaveTimer();
       }
       if (typeof options.onBeforeClosed === "function") options.onBeforeClosed();
       if (isCurrentWindow) settingsWindow = null;

@@ -685,6 +685,8 @@ const settingsWindowRuntime = createSettingsWindowRuntime({
   getNearestWorkArea: (cx, cy) => getNearestWorkArea(cx, cy),
   getTextScale: () => effectiveTextScaleForKey(getSettingsDisplayKey()),
   getTitle: () => translate("settingsWindowTitle"),
+  getSavedBounds: () => _settingsController.get("settingsWindowBounds"),
+  onSaveBounds: (bounds) => _settingsController.applyUpdate("settingsWindowBounds", bounds),
   onBeforeCreate: () => bumpAnimationOverridePreviewPosterGeneration(),
   onBeforeClosed: () => {
     bumpAnimationOverridePreviewPosterGeneration();

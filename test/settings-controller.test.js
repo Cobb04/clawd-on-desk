@@ -403,6 +403,42 @@ describe("applyUpdate", () => {
     assert.match(r.message, /unknown settings key/);
   });
 
+  it("persists Settings window bounds across a controller relaunch", () => {
+    const p = makeTempPath();
+    const bounds = { x: 73, y: 91, width: 1040, height: 720 };
+    const ctrl = createSettingsController({ prefsPath: p });
+
+    assert.deepStrictEqual(
+      ctrl.applyUpdate("settingsWindowBounds", bounds),
+      { status: "ok" },
+    );
+    assert.deepStrictEqual(ctrl.get("settingsWindowBounds"), bounds);
+
+    const relaunched = createSettingsController({ prefsPath: p });
+    assert.deepStrictEqual(relaunched.get("settingsWindowBounds"), bounds);
+  });
+
+  it("rejects malformed Settings window bounds without changing the stored value", () => {
+    const ctrl = createSettingsController({ prefsPath: makeTempPath() });
+    const original = { x: 73, y: 91, width: 1040, height: 720 };
+    assert.strictEqual(
+      ctrl.applyUpdate("settingsWindowBounds", original).status,
+      "ok",
+    );
+
+    for (const invalid of [
+      {},
+      { x: NaN, y: 0, width: 800, height: 560 },
+      { x: 0, y: 0, width: 0.4, height: 560 },
+      { x: 0, y: 0, width: 0, height: 560 },
+      { x: 0, y: 0, width: 800, height: -1 },
+    ]) {
+      const result = ctrl.applyUpdate("settingsWindowBounds", invalid);
+      assert.strictEqual(result.status, "error");
+      assert.deepStrictEqual(ctrl.get("settingsWindowBounds"), original);
+    }
+  });
+
   it("persists tutorialSeen through the normal update path", async () => {
     const p = makeTempPath();
     const ctrl = createSettingsController({ prefsPath: p });

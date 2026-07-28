@@ -209,6 +209,30 @@ const updateRegistry = {
   // ── Window state ──
   x: requireFiniteNumber("x"),
   y: requireFiniteNumber("y"),
+  settingsWindowBounds(value) {
+    if (value === null) return { status: "ok" };
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return {
+        status: "error",
+        message: "settingsWindowBounds must be null or a bounds object",
+      };
+    }
+    const { x, y, width, height } = value;
+    if (
+      !Number.isFinite(x)
+      || !Number.isFinite(y)
+      || !Number.isFinite(width)
+      || width < 1
+      || !Number.isFinite(height)
+      || height < 1
+    ) {
+      return {
+        status: "error",
+        message: "settingsWindowBounds must contain finite x/y and positive width/height",
+      };
+    }
+    return { status: "ok" };
+  },
   size(value) {
     if (typeof value !== "string") {
       return { status: "error", message: "size must be a string" };
